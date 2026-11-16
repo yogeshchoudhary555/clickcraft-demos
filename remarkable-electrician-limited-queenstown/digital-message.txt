@@ -12,7 +12,7 @@ and built one for Remarkable Electrician Limited — it's live here:
 https://yogeshchoudhary555.github.io/clickcraft-demos/e/remarkable-electrician-limited-queenstown/
 
 Your name, your number (021 535 954), your services — the way
-customers in Queenstown actually search for a electrician.
+customers in Queenstown actually search for an electrician.
 
 It's a free preview with no obligation. If you like it, we can
 put it on your own web address and keep it updated for you.
