@@ -84,6 +84,10 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-f
 .chat-input input{flex:1;border:none;outline:none;background:#fff;border-radius:999px;padding:11px 16px;font-size:14px;font-family:inherit;box-shadow:var(--shadow-sm);min-width:0}
 .send-btn{width:44px;height:44px;flex:none;border:none;border-radius:50%;background:var(--green-600);color:#fff;font-size:17px;cursor:pointer;display:grid;place-items:center;box-shadow:var(--shadow-sm)}
 .send-btn:hover{background:var(--green-800)}
+.mic-btn{width:44px;height:44px;flex:none;border:none;border-radius:50%;background:#fff;color:var(--green-800);font-size:18px;cursor:pointer;display:grid;place-items:center;box-shadow:var(--shadow-sm)}
+.mic-btn.listening{background:#d92d20;color:#fff;animation:micpulse 1s infinite}
+@keyframes micpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.voice-note{font-size:11.5px;color:var(--muted);padding:0 14px 8px;text-align:center}
 
 /* ---------- Panels ---------- */
 .panels{display:flex;flex-direction:column;gap:18px;min-width:0}
@@ -193,9 +197,11 @@ footer b{color:#fff}
           <button class="chip" data-cmd="expiry wali items">⏰ Expiry wali items</button>
         </div>
         <form class="chat-input" id="chatForm">
-          <input id="chatText" type="text" placeholder="Message likhiye… jaise 'Ramesh ko 200 udhaar'" autocomplete="off">
+          <input id="chatText" type="text" placeholder="Boliye ya likhiye… jaise 'Ramesh ko 200 udhaar'" autocomplete="off">
+          <button class="mic-btn" type="button" id="micBtn" aria-label="Bolkar boliye (voice input)">🎤</button>
           <button class="send-btn" type="submit" aria-label="Bhejein">➤</button>
         </form>
+        <div class="voice-note" id="voiceNote">🎤 Mic dabakar Hindi me boliye — agent sunega, khata update karega aur hisaab bolkar sunayega.</div>
       </div>
     </div>
 
@@ -281,6 +287,7 @@ footer b{color:#fff}
 const inr = n => '₹' + n.toLocaleString('en-IN');
 const nowTime = () => new Date().toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).toUpperCase();
 const esc = s => s.replace(/[<>&"]/g,'');
+const inDays = n => { const d = new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 
 const state = {
   givenToday: 500,        // Harish Chandra ko subah udhaar diya (chat me dikhaya gaya hai)
@@ -307,11 +314,11 @@ const state = {
     {name:'Meena Kumari',   mobile:'96360 •••29', balance:475,  last:'Aaj, 11:31 AM · ₹200 jama kiye'}
   ],
   expiry: [
-    {item:'Crocin Advance (strip of 15)', batch:'CR-2214', exp:'2026-11-21', stock:40},
-    {item:'Amoxicillin 250mg Capsules',  batch:'AM-0873', exp:'2026-11-23', stock:65},
-    {item:'ORS Powder (Electral)',       batch:'OR-5520', exp:'2026-12-02', stock:120},
-    {item:'Cetirizine 10mg Tablets',     batch:'CT-9031', exp:'2026-12-19', stock:200},
-    {item:'Dettol Antiseptic 250ml',     batch:'DT-1147', exp:'2027-03-31', stock:24}
+    {item:'Crocin Advance (strip of 15)', batch:'CR-2214', exp:inDays(3),   stock:40},
+    {item:'Amoxicillin 250mg Capsules',  batch:'AM-0873', exp:inDays(5),   stock:65},
+    {item:'ORS Powder (Electral)',       batch:'OR-5520', exp:inDays(12),  stock:120},
+    {item:'Cetirizine 10mg Tablets',     batch:'CT-9031', exp:inDays(28),  stock:200},
+    {item:'Dettol Antiseptic 250ml',     batch:'DT-1147', exp:inDays(120), stock:24}
   ]
 };
 
@@ -380,7 +387,70 @@ function addMsg(html, who, time){
 function agentReply(html){
   const t = document.getElementById('typing');
   t.classList.add('on'); chatBody.scrollTop = chatBody.scrollHeight;
-  setTimeout(()=>{ t.classList.remove('on'); addMsg(html,'agent'); }, 650);
+  setTimeout(()=>{ t.classList.remove('on'); addMsg(html,'agent'); if (lastInputWasVoice) speak(html); }, 650);
+}
+
+/* ---------- voice layer (Wispr Round 2 readiness) ---------- */
+let lastInputWasVoice = false;
+const DEV_MAP = {'उधार':'udhaar','हिसाब':'hisaab','दिए':'diye','दिया':'diya','जमा':'jama','बाकी':'baki','आज':'aaj','को':'ko','ने':'ne','रमेश':'Ramesh','सुनीता':'Sunita','हरीश':'Harish','मीना':'Meena','अब्दुल':'Abdul','चेक':'check','पेमेंट':'payment','दवाई':'dawai','नमस्ते':'namaste','एक':'ek','दो':'do','तीन':'teen','चार':'chaar','पाँच':'paanch','पांच':'paanch','छह':'chhe','सात':'saat','आठ':'aath','नौ':'nau','दस':'das','सौ':'sau','हजार':'hazaar','हज़ार':'hazaar','पचास':'pachaas','डेढ़':'dedh','ढाई':'dhai'};
+function normalizeSpeech(raw){
+  let s = String(raw).replace(/[०-९]/g, d => '०१२३४५६७८९'.indexOf(d));
+  for (const [k,v] of Object.entries(DEV_MAP)) s = s.split(k).join(' ' + v + ' ');
+  return s.replace(/\s+/g,' ').trim();
+}
+const NUM_WORDS = {ek:1,do:2,teen:3,chaar:4,char:4,paanch:5,panch:5,chhe:6,chhah:6,saat:7,aath:8,nau:9,das:10,gyarah:11,barah:12,pandra:15,pandrah:15,bees:20,pachees:25,tees:30,pachaas:50,pachas:50,dedh:150,dhai:250};
+function parseAmount(low){
+  const m = low.replace(/,/g,'').match(/(\d{2,7})/);
+  if (m) return parseInt(m[1],10);
+  const words = low.split(/\s+/);
+  for (let i=0;i<words.length;i++){
+    const w = words[i];
+    if (w==='sau' && i>0 && NUM_WORDS[words[i-1]]!==undefined) {
+      let total = NUM_WORDS[words[i-1]]*100;
+      if (words[i+1] && NUM_WORDS[words[i+1]]!==undefined && NUM_WORDS[words[i+1]]<100) total += NUM_WORDS[words[i+1]];
+      return total;
+    }
+    if (w==='hazaar' && i>0 && NUM_WORDS[words[i-1]]!==undefined) return NUM_WORDS[words[i-1]]*1000;
+    if (w==='sau') return 100;
+    if (w==='hazaar') return 1000;
+  }
+  for (const w of words) if (NUM_WORDS[w]!==undefined && NUM_WORDS[w]>=50) return NUM_WORDS[w];
+  return null;
+}
+function speak(html){
+  try{
+    if (!('speechSynthesis' in window)) return;
+    const text = html.replace(/<[^>]+>/g,' ').replace(/[📊💰➕✅📒⏰🔍🚨🙏🎉👇📩⚠️]/g,'').replace(/\s+/g,' ').trim();
+    if (!text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'hi-IN'; u.rate = 1.02;
+    const v = speechSynthesis.getVoices().find(x=>/hi[-_]IN/i.test(x.lang)) || speechSynthesis.getVoices().find(x=>/^hi/i.test(x.lang));
+    if (v) u.voice = v;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e){ /* voice output is best-effort */ }
+}
+function startVoice(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const note = document.getElementById('voiceNote');
+  const btn = document.getElementById('micBtn');
+  if (!SR){ note.textContent = 'Is browser me voice input nahi hai — Chrome me kholiye, ya likhkar bhejiye.'; return; }
+  const rec = new SR();
+  rec.lang = 'hi-IN'; rec.interimResults = true; rec.maxAlternatives = 1;
+  btn.classList.add('listening'); note.textContent = '🎤 Sun raha hoon… boliye, jaise "Ramesh ko do sau udhaar"';
+  rec.onresult = e=>{
+    let txt = '';
+    for (const r of e.results) txt += r[0].transcript;
+    document.getElementById('chatText').value = txt;
+    if (e.results[e.results.length-1].isFinal){
+      const v = txt.trim(); if(!v) return;
+      lastInputWasVoice = true;
+      addMsg(esc(v),'user'); document.getElementById('chatText').value='';
+      setTimeout(()=>handleCommand(v), 150);
+    }
+  };
+  rec.onerror = ()=>{ btn.classList.remove('listening'); note.textContent = 'Voice sunai nahi di — mic phir dabaiye, ya likhkar bhejiye.'; };
+  rec.onend = ()=>{ btn.classList.remove('listening'); };
+  try{ rec.start(); }catch(e){ btn.classList.remove('listening'); }
 }
 function summaryText(){
   return `📊 <b>Aaj ka hisaab taiyaar hai:</b><div class="sumbox">💰 UPI se aaye: <b>${inr(moneyIn())}</b> (${state.settlements.length} payments, ${matched().length} bill se match)\n➕ Aaj udhaar diya: <b>${inr(state.givenToday)}</b>\n✅ Aaj udhaar vasoola: <b>${inr(state.recoveredToday)}</b>\n📒 Kul udhaar baki: <b>${inr(pendingTotal())}</b> (${state.customers.filter(c=>c.balance>0).length} graahak)\n⏰ Is hafte expire: <b>${expiringWeek().length} items</b></div>Kuch aur kaam ho to boliye!`;
@@ -401,10 +471,9 @@ function findCustomer(raw){
 function flashRow(id){ const el=document.getElementById(id); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
 
 function handleCommand(rawInput){
-  const raw = rawInput.trim();
+  const raw = normalizeSpeech(rawInput);
   const low = raw.toLowerCase();
-  const numMatch = raw.replace(/,/g,'').match(/(\d{2,7})/);
-  const num = numMatch ? parseInt(numMatch[1],10) : null;
+  const num = parseAmount(low);
 
   // Summary
   if (/(hisaab|hisab|summary|aaj ka)/.test(low)) { agentReply(summaryText()); return; }
@@ -467,10 +536,12 @@ function sendReminder(i){
 window.sendReminder = sendReminder;
 
 /* ---------- events ---------- */
+document.getElementById('micBtn').addEventListener('click', startVoice);
 document.getElementById('chatForm').addEventListener('submit', e=>{
   e.preventDefault();
   const inp = document.getElementById('chatText');
   const v = inp.value.trim(); if(!v) return;
+  lastInputWasVoice = false;
   addMsg(esc(v),'user'); inp.value='';
   setTimeout(()=>handleCommand(v), 150);
 });
