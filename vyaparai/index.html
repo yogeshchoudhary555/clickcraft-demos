@@ -392,30 +392,37 @@ function agentReply(html){
 
 /* ---------- voice layer (Wispr Round 2 readiness) ---------- */
 let lastInputWasVoice = false;
-const DEV_MAP = {'उधार':'udhaar','हिसाब':'hisaab','दिए':'diye','दिया':'diya','जमा':'jama','बाकी':'baki','आज':'aaj','को':'ko','ने':'ne','रमेश':'Ramesh','सुनीता':'Sunita','हरीश':'Harish','मीना':'Meena','अब्दुल':'Abdul','चेक':'check','पेमेंट':'payment','दवाई':'dawai','नमस्ते':'namaste','एक':'ek','दो':'do','तीन':'teen','चार':'chaar','पाँच':'paanch','पांच':'paanch','छह':'chhe','सात':'saat','आठ':'aath','नौ':'nau','दस':'das','सौ':'sau','हजार':'hazaar','हज़ार':'hazaar','पचास':'pachaas','डेढ़':'dedh','ढाई':'dhai'};
+const DEV_MAP = {'उधार':'udhaar','हिसाब':'hisaab','दिए':'diye','दिया':'diya','जमा':'jama','बाकी':'baki','आज':'aaj','को':'ko','ने':'ne','रमेश':'Ramesh','सुनीता':'Sunita','हरीश':'Harish','मीना':'Meena','अब्दुल':'Abdul','चेक':'check','पेमेंट':'payment','दवाई':'dawai','नमस्ते':'namaste','एक':'ek','दो':'do','तीन':'teen','चार':'chaar','पाँच':'paanch','पांच':'paanch','छह':'chhe','सात':'saat','आठ':'aath','नौ':'nau','दस':'das','ग्यारह':'gyarah','बारह':'barah','तेरह':'terah','चौदह':'chaudah','पंद्रह':'pandrah','सोलह':'solah','सत्रह':'satrah','अठारह':'atharah','उन्नीस':'unnis','बीस':'bees','पच्चीस':'pachees','तीस':'tees','चालीस':'chalis','साठ':'saath','सत्तर':'sattar','अस्सी':'assi','नब्बे':'nabbe','सौ':'sau','हजार':'hazaar','हज़ार':'hazaar','लाख':'lakh','पचास':'pachaas','डेढ़':'dedh','ढाई':'dhai'};
 function normalizeSpeech(raw){
   let s = String(raw).replace(/[०-९]/g, d => '०१२३४५६७८९'.indexOf(d));
   for (const [k,v] of Object.entries(DEV_MAP)) s = s.split(k).join(' ' + v + ' ');
   return s.replace(/\s+/g,' ').trim();
 }
-const NUM_WORDS = {ek:1,do:2,teen:3,chaar:4,char:4,paanch:5,panch:5,chhe:6,chhah:6,saat:7,aath:8,nau:9,das:10,gyarah:11,barah:12,pandra:15,pandrah:15,bees:20,pachees:25,tees:30,pachaas:50,pachas:50,dedh:150,dhai:250};
+const NUM_WORDS = {ek:1,do:2,teen:3,chaar:4,char:4,paanch:5,panch:5,chhe:6,chhah:6,saat:7,aath:8,nau:9,das:10,gyarah:11,barah:12,terah:13,chaudah:14,pandra:15,pandrah:15,solah:16,satrah:17,atharah:18,unnis:19,bees:20,pachees:25,tees:30,chalis:40,pachaas:50,pachas:50,saath:60,sattar:70,assi:80,nabbe:90,dedh:150,dhai:250};
 function parseAmount(low){
-  const m = low.replace(/,/g,'').match(/(\d{2,7})/);
+  const m = low.replace(/,/g,'').match(/(\d{1,7})/);
   if (m) return parseInt(m[1],10);
-  const words = low.split(/\s+/);
+  const words = low.split(/\s+/).filter(Boolean);
+  const MULT = {sau:100,hazaar:1000,lakh:100000};
+  const FRAC = {dedh:1.5,dhai:2.5};
+  let total = 0, found = false;
+  const used = new Set();
   for (let i=0;i<words.length;i++){
-    const w = words[i];
-    if (w==='sau' && i>0 && NUM_WORDS[words[i-1]]!==undefined) {
-      let total = NUM_WORDS[words[i-1]]*100;
-      if (words[i+1] && NUM_WORDS[words[i+1]]!==undefined && NUM_WORDS[words[i+1]]<100) total += NUM_WORDS[words[i+1]];
-      return total;
-    }
-    if (w==='hazaar' && i>0 && NUM_WORDS[words[i-1]]!==undefined) return NUM_WORDS[words[i-1]]*1000;
-    if (w==='sau') return 100;
-    if (w==='hazaar') return 1000;
+    const mult = MULT[words[i]];
+    if (!mult) continue;
+    const prev = words[i-1];
+    let base = 1;
+    if (prev && FRAC[prev]!==undefined) base = FRAC[prev];
+    else if (prev && NUM_WORDS[prev]!==undefined) base = NUM_WORDS[prev];
+    total += base * mult;
+    found = true;
+    used.add(i);
+    if (prev && (FRAC[prev]!==undefined || NUM_WORDS[prev]!==undefined)) used.add(i-1);
   }
-  for (const w of words) if (NUM_WORDS[w]!==undefined && NUM_WORDS[w]>=50) return NUM_WORDS[w];
-  return null;
+  for (let i=0;i<words.length;i++){
+    if (!used.has(i) && NUM_WORDS[words[i]]!==undefined) { total += NUM_WORDS[words[i]]; found = true; }
+  }
+  return found ? Math.round(total) : null;
 }
 function speak(html){
   try{
